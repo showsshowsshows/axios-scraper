@@ -21,40 +21,54 @@ const url = "https://www.wonderville.nyc/events";
 runProgram();
 
 async function runProgram() {
-
     console.log(`Scraping data from ${url} ...`);
-    const data = await scrapeData();
-    await writeToFile(data);
-    await closeProgram(data);
-
+    const html = await fetchHTML(url);
+    if (html) {
+        const data = await scrapeData(html);
+        await writeToFile(data);
+        await closeProgram(data);
+    } else {
+        console.error("Failed to fetch HTML content.");
+    }
 }
 
-async function scrapeData(): Promise<eventData[]> {
+async function fetchHTML(url: string): Promise<string | null> {
     const AxiosInstance = axios.create();
-    const res = await AxiosInstance.get(url);
-    const html = res.data;
+    try {
+        const response = await AxiosInstance.get(url);
+        return response.data;
+    } catch (error) {
+        console.error('Failed to fetch data:', error);
+        return null; 
+    }
+}
+
+async function scrapeData(html: string): Promise<eventData[]> {
+    const AxiosInstance = axios.create();
+    try {
+        const res = await AxiosInstance.get(url);
+        html = res.data;
+    } catch (error) {
+        console.error('Failed to fetch data:', error);
+        return []; 
+    }
     const $ = cheerio.load(html);
 
-    const articleRows = $(".sqs-events-collection-list > div > article");
+    const articleElements = $(".sqs-events-collection-list > div > article").toArray();
     const events: eventData[] = [];
-    articleRows.each((i, elem) => {
-        const title: string = $(elem).find("div h1").text().trim();
-        let dateText: string = $(elem).find("div ul li.eventlist-meta-item.eventlist-meta-date.event-meta-item > time:nth-child(1)").text();
-        const time: string = $(elem).find("div ul li.eventlist-meta-item.eventlist-meta-date.event-meta-item > span:nth-child(2) > time.event-time-12hr").text();
-        const image: string = $(elem).find("a.eventlist-column-thumbnail img").attr("data-src") || '';
-        let excerptHtml: string = $(elem).find(".eventlist-description .sqs-block-content p").first().html() || '';
-        excerptHtml = excerptHtml.replace(/<br\s*\/?>/gi, "\n").trim();
-        let excerpt: string = $('<div>').html(excerptHtml).text();
 
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const [dayOfWeek, month, day, year] = dateText.split(/[\s,]+/);
-        const monthIndex = months.indexOf(month);
-        const dateObject = new Date(parseInt(year), monthIndex, parseInt(day));
-        const formattedDate = dateObject.toISOString().split('T')[0];  // Converts to YYYY-MM-DD format
-        
+    for (const elem of articleElements) {
+        const title = $(elem).find("div h1").text().trim();
+        let dateText = $(elem).find("div ul li.eventlist-meta-item.eventlist-meta-date.event-meta-item > time:nth-child(1)").text();
+        const time = $(elem).find("div ul li.eventlist-meta-item.eventlist-meta-date.event-meta-item > span:nth-child(2) > time.event-time-12hr").text();
+        const image = $(elem).find("a.eventlist-column-thumbnail img").attr("data-src") || '';
+        let excerptHtml = $(elem).find(".eventlist-description .sqs-block-content p").first().html() || '';
+        const excerpt = await formatExcerpt(excerptHtml, $);
+        const date = await formattedDate(dateText);
+
         events.push({
             title,
-            date: formattedDate,
+            date,
             genre: "games", 
             location: "wonderville",
             time,
@@ -64,12 +78,26 @@ async function scrapeData(): Promise<eventData[]> {
             isFeatured: false,
             rating: 0
         });
-    });
-    console.log(`found ${events.length} events`)
+    }
+    console.log(`Found ${events.length} events`);
     return events;
 }
- 
 
+async function formattedDate(dateText: string): Promise<string> {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const [dayOfWeek, month, day, year] = dateText.split(/[\s,]+/);
+    const monthIndex = months.indexOf(month);
+    const dateObject = new Date(parseInt(year), monthIndex, parseInt(day));
+    const formattedDate = dateObject.toISOString().split('T')[0];  
+    return formattedDate;
+}
+
+async function formatExcerpt(excerptHtml: string, $:any): Promise<string> {
+    excerptHtml = excerptHtml.replace(/<br\s*\/?>/gi, "\n").trim();
+    let excerpt = $('<div>').html(excerptHtml).text();
+    return excerpt;
+}
+ 
 async function writeToFile(events: Array<eventData>) {
     if (events.length) {
         console.log(`writing ${events.length} events to file`);
