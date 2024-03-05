@@ -13,6 +13,7 @@ interface eventData {
     excerpt: string;
     isFeatured: boolean;
     rating: number;
+    expiresAt: string;
 }
 
 // to change calander update url and Element selectors
@@ -65,7 +66,7 @@ async function scrapeData(html: string): Promise<eventData[]> {
         let excerptHtml = $(elem).find(".eventlist-description .sqs-block-content p").first().html() || '';
         const excerpt = await formatExcerpt(excerptHtml, $);
         const date = await formattedDate(dateText);
-
+        const expiresAt = calculateExpiresAt(date)
         events.push({
             title,
             date,
@@ -76,7 +77,8 @@ async function scrapeData(html: string): Promise<eventData[]> {
             image,
             excerpt,
             isFeatured: false,
-            rating: 0
+            rating: 0,
+            expiresAt
         });
     }
     console.log(`Found ${events.length} events`);
@@ -117,3 +119,13 @@ async function closeProgram(events: Array<eventData>) {
         console.log('No data to save.');
     }
 }
+
+const calculateExpiresAt = (eventDate: any) => {
+    const date = new Date(eventDate);
+  
+    date.setUTCDate(date.getUTCDate() + 1);
+    date.setUTCHours(2, 0, 0, 0); 
+  
+    let isoString = date.toISOString(); 
+    return isoString;
+  };
