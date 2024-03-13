@@ -16,7 +16,6 @@ interface eventData {
     expiresAt: string;
 }
 
-// to change calander update url and Element selectors
 const url = "https://www.wonderville.nyc/events";
 
 runProgram();
